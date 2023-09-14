@@ -24,7 +24,7 @@ function fileWritePromise(file, data) {
   return new Promise((resolve, reject) => {
     fs.writeFile(`${file}`, data, 'utf-8', (err) => {
       if (err) {
-        reject(err);
+        reject(err, 12354);
       } else {
         resolve({
           message: `data saved in ${file}`,
@@ -124,29 +124,36 @@ async function stepThree(
   const lipsumUpperText = await readFileCb(file);
   const lowerCaseText = await lowerCaseCb(lipsumUpperText);
   const splitTextArr = await splitSentencecb(lowerCaseText);
-  const newFilePathArr = [];
-  for (let index = 0; index < splitTextArr.length; index++) {
-    newFilePathArr.push(`sentence-${index + 1}.txt`);
-    const fileInfo = await writeFileCb(
-      `sentence-${index + 1}.txt`,
-      splitTextArr[index].trimStart(),
-    );
-    const fileNameInfo = await appendFileCb(
-      'filenames.txt',
-      '\n' + fileInfo.fileName,
-    );
-  }
+  const newFilePathArr = await Promise.all(
+    splitTextArr.map(async (splitText, index) => {
+      try {
+        await writeFileCb(
+          `./data/sentence-${index + 1}.txt`,
+          splitText.trimStart(),
+        );
+      } catch (error) {
+        console.log(error);
+      }
+      return `./data/sentence-${index + 1}.txt`;
+    }),
+  );
+  await Promise.all(
+    newFilePathArr.map((objEl) => {
+      return appendFileCb('filenames.txt', '\n' + objEl);
+    }),
+  );
   return newFilePathArr;
 }
 
 // step 4
 async function stepFour(pathArr, readFileCb, sortContentCb, appendFileCb) {
+  const textArr = await Promise.all(pathArr.map((path) => readFileCb(path)));
+  const sortcontent = await Promise.all(
+    textArr.map((text) => sortContentCb(text)),
+  );
   let fileInfo = {};
-  for (let path of pathArr) {
-    const text = await readFileCb(path);
-    const sortText = await sortContentCb(text);
-    console.log(path);
-    fileInfo = await appendFileCb('sorted.txt', sortText + '. ' + '\n');
+  for (let content of sortcontent) {
+    fileInfo = await appendFileCb('sorted.txt', content + '. ' + '\n');
   }
   const fileNameInfo = await appendFileCb(
     'filenames.txt',
@@ -184,6 +191,8 @@ async function main(file) {
       fileAppendPromise,
       fileWritePromise,
     );
+
+    console.log(newFIlepathArr);
     const mainFileInfoName = await stepFour(
       newFIlepathArr,
       fileReadPromise,
@@ -191,11 +200,16 @@ async function main(file) {
       fileAppendPromise,
     );
     setTimeout(async () => {
-      const readFileData = await stepFive(
-        mainFileInfoName.fileName,
-        fileReadPromise,
-        fileUnlinkPromise,
-      );
+      try {
+        const lastMessage = await stepFive(
+          mainFileInfoName.fileName,
+          fileReadPromise,
+          fileUnlinkPromise,
+        );
+        console.log(lastMessage);
+      } catch (error) {
+        console.log(error);
+      }
       // console.log(readFileData.split('\n'));
     }, 5000);
 
